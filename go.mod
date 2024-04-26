@@ -1,4 +1,4 @@
-module github.com/rivo/tview
+module github.com/voodookiidoo/tui
 
 go 1.18
 
