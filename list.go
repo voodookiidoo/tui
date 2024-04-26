@@ -1,18 +1,34 @@
 package tview
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
 )
 
-// listItem represents one item in a List.
-type listItem struct {
-	MainText      string // The main text of the list item.
-	SecondaryText string // A secondary text to be shown underneath the main text.
-	Shortcut      rune   // The key to select the list item directly, 0 if there is no shortcut.
-	Selected      func() // The optional function which is called when the item is selected.
+type ListItem interface {
+	GetText() string
+	GetSecondaryText() string
+	GetSelected() func()
+}
+type TextItem struct {
+	txt string
+	sec string
+	fn  func()
+}
+
+func NewTextItem(txt string, sec string, fn func()) *TextItem {
+	return &TextItem{txt: txt, sec: sec, fn: fn}
+}
+
+func (t *TextItem) GetText() string {
+	return t.txt
+}
+
+func (t *TextItem) GetSecondaryText() string {
+	return t.sec
+}
+
+func (t *TextItem) GetSelected() func() {
+	return t.fn
 }
 
 // List displays rows of items, each of which can be selected. List items can be
@@ -39,7 +55,7 @@ type List struct {
 	*Box
 
 	// The items of the list.
-	items []*listItem
+	items []ListItem
 
 	// The index of the currently selected item.
 	currentItem int
@@ -78,11 +94,11 @@ type List struct {
 
 	// An optional function which is called when the user has navigated to a
 	// list item.
-	changed func(index int, mainText, secondaryText string, shortcut rune)
+	changed func(index int, mainText, secondaryText string)
 
 	// An optional function which is called when a list item was selected. This
 	// function will be called even if the list item defines its own callback.
-	selected func(index int, mainText, secondaryText string, shortcut rune)
+	selected func(index int, mainText, secondaryText string)
 
 	// An optional function which is called when the user presses the Escape key.
 	done func()
@@ -120,7 +136,7 @@ func (l *List) SetCurrentItem(index int) *List {
 
 	if index != l.currentItem && l.changed != nil {
 		item := l.items[index]
-		l.changed(index, item.MainText, item.SecondaryText, item.Shortcut)
+		l.changed(index, item.GetText(), item.GetSecondaryText())
 	}
 
 	l.currentItem = index
@@ -198,7 +214,7 @@ func (l *List) RemoveItem(index int) *List {
 	// Fire "changed" event for removed items.
 	if previousCurrentItem == index && l.changed != nil {
 		item := l.items[l.currentItem]
-		l.changed(l.currentItem, item.MainText, item.SecondaryText, item.Shortcut)
+		l.changed(l.currentItem, item.GetText(), item.GetSecondaryText())
 	}
 
 	return l
@@ -243,6 +259,13 @@ func (l *List) SetShortcutColor(color tcell.Color) *List {
 // the list itself.
 func (l *List) SetShortcutStyle(style tcell.Style) *List {
 	l.shortcutStyle = style
+	return l
+}
+
+func (l *List) SetItemText(index int, main, secondary string) *List {
+	//item := l.items[index]
+	//item.MainText = main
+	//item.SecondaryText = secondary
 	return l
 }
 
@@ -307,7 +330,7 @@ func (l *List) SetWrapAround(wrapAround bool) *List {
 //
 // This function is also called when the first item is added or when
 // SetCurrentItem() is called.
-func (l *List) SetChangedFunc(handler func(index int, mainText string, secondaryText string, shortcut rune)) *List {
+func (l *List) SetChangedFunc(handler func(index int, mainText string, secondaryText string)) *List {
 	l.changed = handler
 	return l
 }
@@ -316,7 +339,7 @@ func (l *List) SetChangedFunc(handler func(index int, mainText string, secondary
 // list item by pressing Enter on the current selection. The function receives
 // the item's index in the list of items (starting with 0), its main text,
 // secondary text, and its shortcut rune.
-func (l *List) SetSelectedFunc(handler func(int, string, string, rune)) *List {
+func (l *List) SetSelectedFunc(handler func(int, string, string)) *List {
 	l.selected = handler
 	return l
 }
@@ -329,8 +352,8 @@ func (l *List) SetDoneFunc(handler func()) *List {
 }
 
 // AddItem calls InsertItem() with an index of -1.
-func (l *List) AddItem(mainText, secondaryText string, shortcut rune, selected func()) *List {
-	l.InsertItem(-1, mainText, secondaryText, shortcut, selected)
+func (l *List) AddItem(item ListItem) *List {
+	l.InsertItem(-1, item)
 	return l
 }
 
@@ -356,13 +379,7 @@ func (l *List) AddItem(mainText, secondaryText string, shortcut rune, selected f
 // The currently selected item will shift its position accordingly. If the list
 // was previously empty, a "changed" event is fired because the new item becomes
 // selected.
-func (l *List) InsertItem(index int, mainText, secondaryText string, shortcut rune, selected func()) *List {
-	item := &listItem{
-		MainText:      mainText,
-		SecondaryText: secondaryText,
-		Shortcut:      shortcut,
-		Selected:      selected,
-	}
+func (l *List) InsertItem(index int, item ListItem) *List {
 
 	// Shift index to range.
 	if index < 0 {
@@ -389,7 +406,7 @@ func (l *List) InsertItem(index int, mainText, secondaryText string, shortcut ru
 	// Fire a "change" event for the first item in the list.
 	if len(l.items) == 1 && l.changed != nil {
 		item := l.items[0]
-		l.changed(0, item.MainText, item.SecondaryText, item.Shortcut)
+		l.changed(0, item.GetText(), item.GetSecondaryText())
 	}
 
 	return l
@@ -403,16 +420,7 @@ func (l *List) GetItemCount() int {
 // GetItemText returns an item's texts (main and secondary). Panics if the index
 // is out of range.
 func (l *List) GetItemText(index int) (main, secondary string) {
-	return l.items[index].MainText, l.items[index].SecondaryText
-}
-
-// SetItemText sets an item's main and secondary text. Panics if the index is
-// out of range.
-func (l *List) SetItemText(index int, main, secondary string) *List {
-	item := l.items[index]
-	item.MainText = main
-	item.SecondaryText = secondary
-	return l
+	return l.items[index].GetText(), l.items[index].GetSecondaryText()
 }
 
 // FindItems searches the main and secondary texts for the given strings and
@@ -425,34 +433,23 @@ func (l *List) SetItemText(index int, main, secondary string) *List {
 // false, only one of the two search strings must be contained.
 //
 // Set ignoreCase to true for case-insensitive search.
-func (l *List) FindItems(mainSearch, secondarySearch string, mustContainBoth, ignoreCase bool) (indices []int) {
-	if mainSearch == "" && secondarySearch == "" {
-		return
-	}
-
-	if ignoreCase {
-		mainSearch = strings.ToLower(mainSearch)
-		secondarySearch = strings.ToLower(secondarySearch)
-	}
-
+func (l *List) FindItems(filter func(item ListItem) bool) (indices []int) {
 	for index, item := range l.items {
-		mainText := item.MainText
-		secondaryText := item.SecondaryText
-		if ignoreCase {
-			mainText = strings.ToLower(mainText)
-			secondaryText = strings.ToLower(secondaryText)
-		}
-
-		// strings.Contains() always returns true for a "" search.
-		mainContained := strings.Contains(mainText, mainSearch)
-		secondaryContained := strings.Contains(secondaryText, secondarySearch)
-		if mustContainBoth && mainContained && secondaryContained ||
-			!mustContainBoth && (mainText != "" && mainContained || secondaryText != "" && secondaryContained) {
+		if filter(item) {
 			indices = append(indices, index)
 		}
 	}
-
 	return
+}
+
+func (l *List) FindFirst(filter func(item ListItem) bool) int {
+	index := -1
+	for index, item := range l.items {
+		if filter(item) {
+			return index
+		}
+	}
+	return index
 }
 
 // Clear removes all items from the list.
@@ -475,15 +472,15 @@ func (l *List) Draw(screen tcell.Screen) {
 	}
 
 	// Do we show any shortcuts?
-	var showShortcuts bool
-	for _, item := range l.items {
-		if item.Shortcut != 0 {
-			showShortcuts = true
-			x += 4
-			width -= 4
-			break
-		}
-	}
+	//var showShortcuts bool
+	//for _, item := range l.items {
+	//	if item.Shortcut != 0 {
+	//		showShortcuts = true
+	//		x += 4
+	//		width -= 4
+	//		break
+	//	}
+	//}
 
 	if l.horizontalOffset < 0 {
 		l.horizontalOffset = 0
@@ -501,9 +498,9 @@ func (l *List) Draw(screen tcell.Screen) {
 		}
 
 		// Shortcuts.
-		if showShortcuts && item.Shortcut != 0 {
-			printWithStyle(screen, fmt.Sprintf("(%s)", string(item.Shortcut)), x-5, y, 0, 4, AlignRight, l.shortcutStyle, false)
-		}
+		//if showShortcuts && item.Shortcut != 0 {
+		//	printWithStyle(screen, fmt.Sprintf("(%s)", string(item.Shortcut)), x-5, y, 0, 4, AlignRight, l.shortcutStyle, false)
+		//}
 
 		// Main text.
 		selected := index == l.currentItem && (!l.selectedFocusOnly || l.HasFocus())
@@ -511,7 +508,7 @@ func (l *List) Draw(screen tcell.Screen) {
 		if selected {
 			style = l.selectedStyle
 		}
-		_, _, printedWidth := printWithStyle(screen, item.MainText, x, y, l.horizontalOffset, width, AlignLeft, style, false)
+		_, _, printedWidth := printWithStyle(screen, item.GetText(), x, y, l.horizontalOffset, width, AlignLeft, style, false)
 		if printedWidth > maxWidth {
 			maxWidth = printedWidth
 		}
@@ -530,7 +527,7 @@ func (l *List) Draw(screen tcell.Screen) {
 
 		// Secondary text.
 		if l.showSecondaryText {
-			_, _, printedWidth := printWithStyle(screen, item.SecondaryText, x, y, l.horizontalOffset, width, AlignLeft, l.secondaryTextStyle, false)
+			_, _, printedWidth := printWithStyle(screen, item.GetSecondaryText(), x, y, l.horizontalOffset, width, AlignLeft, l.secondaryTextStyle, false)
 			if printedWidth > maxWidth {
 				maxWidth = printedWidth
 			}
@@ -609,36 +606,36 @@ func (l *List) InputHandler() func(event *tcell.EventKey, setFocus func(p Primit
 		case tcell.KeyEnter:
 			if l.currentItem >= 0 && l.currentItem < len(l.items) {
 				item := l.items[l.currentItem]
-				if item.Selected != nil {
-					item.Selected()
+				if item.GetSelected() != nil {
+					item.GetSelected()()
 				}
 				if l.selected != nil {
-					l.selected(l.currentItem, item.MainText, item.SecondaryText, item.Shortcut)
+					l.selected(l.currentItem, item.GetText(), item.GetSecondaryText())
 				}
 			}
 		case tcell.KeyRune:
-			ch := event.Rune()
-			if ch != ' ' {
-				// It's not a space bar. Is it a shortcut?
-				var found bool
-				for index, item := range l.items {
-					if item.Shortcut == ch {
-						// We have a shortcut.
-						found = true
-						l.currentItem = index
-						break
-					}
-				}
-				if !found {
-					break
-				}
-			}
+			//ch := event.Rune()
+			//if ch != ' ' {
+			//	// It's not a space bar. Is it a shortcut?
+			//	var found bool
+			//	for index, item := range l.items {
+			//		if item.Shortcut == ch {
+			//			// We have a shortcut.
+			//			found = true
+			//			l.currentItem = index
+			//			break
+			//		}
+			//	}
+			//	if !found {
+			//		break
+			//	}
+			//}
 			item := l.items[l.currentItem]
-			if item.Selected != nil {
-				item.Selected()
+			if item.GetSelected() != nil {
+				item.GetSelected()()
 			}
 			if l.selected != nil {
-				l.selected(l.currentItem, item.MainText, item.SecondaryText, item.Shortcut)
+				l.selected(l.currentItem, item.GetText(), item.GetSecondaryText())
 			}
 		}
 
@@ -659,7 +656,7 @@ func (l *List) InputHandler() func(event *tcell.EventKey, setFocus func(p Primit
 		if l.currentItem != previousItem && l.currentItem < len(l.items) {
 			if l.changed != nil {
 				item := l.items[l.currentItem]
-				l.changed(l.currentItem, item.MainText, item.SecondaryText, item.Shortcut)
+				l.changed(l.currentItem, item.GetText(), item.GetSecondaryText())
 			}
 			l.adjustOffset()
 		}
@@ -700,15 +697,15 @@ func (l *List) MouseHandler() func(action MouseAction, event *tcell.EventMouse, 
 			index := l.indexAtPoint(event.Position())
 			if index != -1 {
 				item := l.items[index]
-				if item.Selected != nil {
-					item.Selected()
+				if item.GetSelected() != nil {
+					item.GetSelected()()
 				}
 				if l.selected != nil {
-					l.selected(index, item.MainText, item.SecondaryText, item.Shortcut)
+					l.selected(index, item.GetText(), item.GetSecondaryText())
 				}
 				if index != l.currentItem {
 					if l.changed != nil {
-						l.changed(index, item.MainText, item.SecondaryText, item.Shortcut)
+						l.changed(index, item.GetText(), item.GetSecondaryText())
 					}
 					l.adjustOffset()
 				}

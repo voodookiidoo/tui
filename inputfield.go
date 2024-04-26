@@ -367,7 +367,7 @@ func (i *InputField) Autocomplete() *InputField {
 	suffixLength := 9999 // I'm just waiting for the day somebody opens an issue with this number being too small.
 	i.autocompleteList.Clear()
 	for index, entry := range entries {
-		i.autocompleteList.AddItem(entry, "", 0, nil)
+		i.autocompleteList.AddItem(NewTextItem(entry, "", nil))
 		if strings.HasPrefix(entry, text) && len(entry)-len(text) < suffixLength {
 			currentEntry = index
 			suffixLength = len(text) - len(entry)
@@ -559,7 +559,7 @@ func (i *InputField) InputHandler() func(event *tcell.EventKey, setFocus func(p 
 				}
 				return
 			case tcell.KeyDown, tcell.KeyUp, tcell.KeyPgDn, tcell.KeyPgUp:
-				i.autocompleteList.SetChangedFunc(func(index int, text, secondaryText string, shortcut rune) {
+				i.autocompleteList.SetChangedFunc(func(index int, text, secondaryText string) {
 					text = stripTags(text)
 					if i.autocompleted != nil {
 						if i.autocompleted(text, index, AutocompletedNavigate) {
@@ -641,7 +641,7 @@ func (i *InputField) MouseHandler() func(action MouseAction, event *tcell.EventM
 		defer i.autocompleteListMutex.Unlock()
 		if i.autocompleteList != nil {
 			i.autocompleteList.SetChangedFunc(nil)
-			i.autocompleteList.SetSelectedFunc(func(index int, text, secondaryText string, shortcut rune) {
+			i.autocompleteList.SetSelectedFunc(func(index int, text, secondaryText string) {
 				text = stripTags(text)
 				if i.autocompleted != nil {
 					if i.autocompleted(text, index, AutocompletedClick) {

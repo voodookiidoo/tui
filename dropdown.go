@@ -264,7 +264,7 @@ func (d *DropDown) SetDisabled(disabled bool) FormItem {
 // callback is called when this option was selected. It may be nil.
 func (d *DropDown) AddOption(text string, selected func()) *DropDown {
 	d.options = append(d.options, &dropDownOption{Text: text, Selected: selected})
-	d.list.AddItem(d.optionPrefix+text+d.optionSuffix, "", 0, nil)
+	d.list.AddItem(NewTextItem(d.optionPrefix+text+d.optionSuffix, "", nil))
 	return d
 }
 
@@ -506,7 +506,7 @@ func (d *DropDown) openList(setFocus func(Primitive)) {
 	d.open = true
 	optionBefore := d.currentOption
 
-	d.list.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+	d.list.SetSelectedFunc(func(index int, mainText, secondaryText string) {
 		if d.dragging {
 			return // If we're dragging the mouse, we don't want to trigger any events.
 		}
